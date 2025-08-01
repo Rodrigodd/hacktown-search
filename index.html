@@ -305,6 +305,19 @@
         });
     }
 
+    // Retorna a string formatarDataPortugues para o dia de hoje
+    function dataHojePortugues() {
+      const agora = new Date();
+      // converte para o fuso de SP
+      let spDate;
+      if (window.luxon) {
+        spDate = window.luxon.DateTime.fromJSDate(agora).setZone(FIXED_TIMEZONE).toJSDate();
+      } else {
+        spDate = agora;
+      }
+      return formatarDataPortugues(spDate);
+    }
+
     function updateDateDropdown(events, timezone) {
       let dateSel = document.getElementById("dateFilter");
       let daysSet = new Set();
@@ -332,7 +345,20 @@
         opt.textContent = day.charAt(0).toUpperCase() + day.slice(1);
         dateSel.appendChild(opt);
       });
-      if (prev && daysArr.includes(prev)) dateSel.value = prev;
+
+      // Se não houver seleção anterior, tente selecionar hoje automaticamente
+      if (!prev || !daysArr.includes(prev)) {
+        // Só define para hoje se existir essa opção
+        const hojeStr = dataHojePortugues();
+        if (daysArr.includes(hojeStr)) {
+          dateSel.value = hojeStr;
+        } else {
+          dateSel.value = "";
+        }
+      } else {
+        // Mantém a seleção anterior
+        dateSel.value = prev;
+      }
     }
 
     loadScheduleFromServer();
