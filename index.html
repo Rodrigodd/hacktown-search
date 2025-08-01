@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
   <meta charset="UTF-8">
-  <title>HackTown 2025 Schedule Viewer</title>
+  <title>Agenda HackTown 2025</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: system-ui, sans-serif; margin: 2em; background: #f8f8fb; color: #222; }
@@ -51,31 +51,29 @@
   </style>
 </head>
 <body>
-  <h1>HackTown 2025 Schedule Viewer</h1>
+  <h1>Visualizador de Agenda HackTown 2025</h1>
   <div class="controls">
     <span id="serverStatus"></span>
     <label>
-      Date:
-      <select id="dateFilter"><option value="">All Dates</option></select>
+      Data:
+      <select id="dateFilter"><option value="">Todas as Datas</option></select>
     </label>
     <label>
-      Time filter:
-      <input type="text" placeholder="e.g. 09:00 or 10:00-12:00" id="timeFilter" size="13">
+      Filtro de horário:
+      <input type="text" placeholder="ex: 09:00 ou 10:00-12:00" id="timeFilter" size="13">
     </label>
-    <button id="filterBtn">Filter</button>
-    <span style="color: #555; font-size: 0.95em; margin-left: 1em;">Timezone: America/Sao_Paulo</span>
+    <button id="filterBtn">Filtrar</button>
   </div>
-  <div id="loading">Loading schedule from server...</div>
+  <div id="loading">Carregando agenda do servidor...</div>
   <div id="schedule"></div>
   <!-- Popup Overlay -->
   <div id="popupOverlay">
     <div id="popup">
-      <button id="popupClose" title="Close">&times;</button>
+      <button id="popupClose" title="Fechar">&times;</button>
       <div id="popupContent"></div>
     </div>
   </div>
   <script>
-    // Use only America/Sao_Paulo timezone everywhere
     const FIXED_TIMEZONE = "America/Sao_Paulo";
 
     function parseTimeRange(str) {
@@ -99,12 +97,22 @@
       return d.getHours()*60 + d.getMinutes();
     }
 
+    // Traduções de dias da semana e meses para português
+    const diasSemana = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+    const mesesAno = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    function formatarDataPortugues(date) {
+      // date é um objeto Date
+      return diasSemana[date.getDay()] + ', ' +
+        String(date.getDate()).padStart(2, '0') + ' de ' +
+        mesesAno[date.getMonth()] + ' de ' + date.getFullYear();
+    }
+
     let allEvents = [];
     function render(events, filterTimeRange, filterDayKey) {
       const scheduleDiv = document.getElementById("schedule");
       document.getElementById("loading").style.display = "none";
       if (!events.length) {
-        scheduleDiv.innerHTML = "<p>No data loaded.</p>";
+        scheduleDiv.innerHTML = "<p>Nenhum dado carregado.</p>";
         return;
       }
 
@@ -112,7 +120,7 @@
       let days = {};
       events.forEach(ev => {
         let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
-        let dayKey = localStart.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        let dayKey = formatarDataPortugues(localStart);
         if (!days[dayKey]) days[dayKey] = [];
         days[dayKey].push(ev);
       });
@@ -148,17 +156,23 @@
 
       let html = "";
       for (let day of Object.keys(days).sort((a, b) => {
-        let getDate = txt => new Date(days[txt][0] ? toLocal(days[txt][0].start_time, FIXED_TIMEZONE).toDateString() : txt);
+        let getDate = txt => {
+          let partes = txt.split(' ');
+          let dia = Number(partes[1]);
+          let mes = mesesAno.indexOf(partes[3]);
+          let ano = Number(partes[5]);
+          return new Date(ano, mes, dia);
+        };
         return getDate(a) - getDate(b);
       })) {
         if (!days[day].length) continue;
-        html += `<div class="day"><h2>${day}</h2>`;
+        html += `<div class="day"><h2>${day.charAt(0).toUpperCase() + day.slice(1)}</h2>`;
         for (let ev of days[day]) {
           let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
           let localEnd = toLocal(ev.end_time, FIXED_TIMEZONE);
-          let startStr = localStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          let endStr = localEnd.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          let place = ev.place || "<em>no place</em>";
+          let startStr = localStart.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
+          let endStr = localEnd.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
+          let place = ev.place || "<em>sem local definido</em>";
           html += `<div class="event" data-id="${ev.id}">
             <span class="event-title">${startStr} - ${endStr} | ${ev.title}</span>
             <div class="event-place">@ ${place}</div>
@@ -166,9 +180,9 @@
         }
         html += "</div>";
       }
-      scheduleDiv.innerHTML = html || "<p>No events match the filter.</p>";
+      scheduleDiv.innerHTML = html || "<p>Nenhum evento corresponde ao filtro.</p>";
 
-      // Add event listeners for popups
+      // Adiciona eventos para abrir o popup
       document.querySelectorAll('.event').forEach(div => {
         div.onclick = () => {
           const eventId = Number(div.getAttribute('data-id'));
@@ -191,16 +205,16 @@
       if (!ev) return;
       let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
       let localEnd = toLocal(ev.end_time, FIXED_TIMEZONE);
-      let dateStr = localStart.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-      let startStr = localStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      let endStr = localEnd.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      let dateStr = formatarDataPortugues(localStart);
+      let startStr = localStart.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
+      let endStr = localEnd.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
 
-      let desc = ev.description && ev.description.trim() ? ev.description : "<em>No description provided.</em>";
-      let place = ev.place || "<em>no place</em>";
+      let desc = ev.description && ev.description.trim() ? ev.description : "<em>Nenhuma descrição disponível.</em>";
+      let place = ev.place || "<em>sem local definido</em>";
 
       let speakersHtml = "";
       if (ev.speakers && ev.speakers.length) {
-        speakersHtml = `<div class="popup-speakers"><strong>Speakers:</strong>`;
+        speakersHtml = `<div class="popup-speakers"><strong>Palestrantes:</strong>`;
         for (const s of ev.speakers) {
           speakersHtml += `<div class="popup-speaker">`;
           if (s.picture) {
@@ -235,7 +249,6 @@
       if (e.target === this) this.style.display = "none";
     };
 
-    // ---- UI handlers ----
     document.getElementById("filterBtn").onclick = function() {
       render(
         allEvents,
@@ -254,7 +267,7 @@
       );
     };
 
-    // ---- Luxon fallback warning ----
+    // Luxon para fuso horário
     (function addLuxonScript() {
       if (window.luxon) return;
       let s = document.createElement("script");
@@ -270,13 +283,11 @@
       document.head.appendChild(s);
     })();
 
-    // ---- Load all_schedules.json from server ----
     function loadScheduleFromServer() {
       const status = document.getElementById('serverStatus');
       fetch('all_schedules.json')
         .then(resp => {
           if (!resp.ok) throw new Error("HTTP " + resp.status);
-          status.textContent = "Schedule loaded from server.";
           return resp.json();
         })
         .then(data => {
@@ -289,7 +300,7 @@
           );
         })
         .catch(err => {
-          status.textContent = "Failed to load all_schedules.json from server: " + err;
+          status.textContent = "Falha ao carregar all_schedules.json do servidor: " + err;
           document.getElementById("loading").style.display = "none";
         });
     }
@@ -299,23 +310,26 @@
       let daysSet = new Set();
       events.forEach(ev => {
         let localStart = toLocal(ev.start_time, timezone);
-        let dayKey = localStart.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        let dayKey = formatarDataPortugues(localStart);
         daysSet.add(dayKey);
       });
       let daysArr = Array.from(daysSet).sort((a, b) => {
         let getDate = txt => {
-          let d = new Date(txt.replace(/^(\w+), /, ""));
-          return d;
+          let partes = txt.split(' ');
+          let dia = Number(partes[1]);
+          let mes = mesesAno.indexOf(partes[3]);
+          let ano = Number(partes[5]);
+          return new Date(ano, mes, dia);
         };
         return getDate(a) - getDate(b);
       });
 
       let prev = dateSel.value;
-      dateSel.innerHTML = `<option value="">All Dates</option>`;
+      dateSel.innerHTML = `<option value="">Todas as Datas</option>`;
       daysArr.forEach(day => {
         let opt = document.createElement("option");
         opt.value = day;
-        opt.textContent = day;
+        opt.textContent = day.charAt(0).toUpperCase() + day.slice(1);
         dateSel.appendChild(opt);
       });
       if (prev && daysArr.includes(prev)) dateSel.value = prev;
