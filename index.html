@@ -9,7 +9,6 @@
     h1 { font-size: 2em; }
     .controls { margin-bottom: 2em; }
     label { margin-right: 1em; }
-    input[type="file"] { margin-right: 2em; }
     .day { margin-top: 2em; }
     .event { margin-left: 1em; margin-bottom: .8em; padding: .7em 1em; background: #fff; border-radius: 7px; box-shadow: 0 2px 8px #0001; }
     .event-title { font-weight: bold; }
@@ -26,6 +25,10 @@
   <div class="controls">
     <span id="serverStatus"></span>
     <label>
+      Date:
+      <select id="dateFilter"><option value="">All Dates</option></select>
+    </label>
+    <label>
       Time filter:
       <input type="text" placeholder="e.g. 09:00 or 10:00-12:00" id="timeFilter" size="13">
     </label>
@@ -40,7 +43,6 @@
   <script>
     // ---- Timezone helper ----
     function getTimezones() {
-      // Only a few main timezones for demo, but can be expanded.
       return [
         "America/Sao_Paulo", "America/Recife", "America/Belem", "America/Fortaleza",
         "America/Manaus", "America/Cuiaba", "UTC", "Europe/Lisbon", "Europe/London",
@@ -52,7 +54,6 @@
     }
     // ---- Time filter parsing ----
     function parseTimeRange(str) {
-      // Accepts: 08:00-12:00 or 10:00
       let s = str.trim();
       if (!s) return null;
       if (s.includes('-')) {
@@ -63,7 +64,6 @@
       }
     }
     function parseHHMM(s) {
-      // Returns {h, m}
       let [h, m] = s.split(':').map(Number);
       return { h, m };
     }
@@ -75,8 +75,8 @@
     }
     // ---- Main rendering ----
     let allEvents = [];
-    let lastTimezone = "";
-    function render(events, filterTimeRange, timezone) {
+    let uniqueDays = [];
+    function render(events, filterTimeRange, timezone, filterDayKey) {
       const scheduleDiv = document.getElementById("schedule");
       document.getElementById("loading").style.display = "none";
       if (!events.length) {
@@ -95,7 +95,16 @@
         days[dayKey].push(ev);
       });
 
-      // Filtering
+      // Filtering by date
+      if (filterDayKey) {
+        for (let day in days) {
+          if (day !== filterDayKey) {
+            delete days[day];
+          }
+        }
+      }
+
+      // Filtering by time
       if (filterTimeRange) {
         const [startStr, endStr] = filterTimeRange;
         const startObj = parseHHMM(startStr);
@@ -111,10 +120,8 @@
             const evEndMin = localTimeToMinutes(endLocal);
 
             if (startMin === endMin) {
-              // Point: event covers that time?
               return evStartMin <= startMin && startMin < evEndMin;
             } else {
-              // Range: event overlaps with range?
               return !(evEndMin <= startMin || evStartMin >= endMin);
             }
           });
@@ -124,7 +131,6 @@
       // Render HTML
       let html = "";
       for (let day of Object.keys(days).sort((a, b) => {
-        // Sort by date (parse to Date)
         let getDate = txt => new Date(days[txt][0] ? toLocal(days[txt][0].start_time, timezone).toDateString() : txt);
         return getDate(a) - getDate(b);
       })) {
@@ -147,25 +153,32 @@
     }
 
     function toLocal(isoString, timezone) {
-      // Returns a Date object in the target timezone, but JS Date is always in local.
-      // So we use the Date and format in that target timezone using Intl.
-      // For filtering, we use UTC and then format.
-      // But for time math, we must convert date to the timezone.
-      // We'll use luxon if available, else fallback.
       if (window.luxon) {
         return window.luxon.DateTime.fromISO(isoString, { zone: 'utc' }).setZone(timezone).toJSDate();
       } else {
-        // Fallback: parse as Date (should be UTC), adjust offset manually
         return new Date(isoString);
       }
     }
 
     // ---- UI handlers ----
     document.getElementById("filterBtn").onclick = function() {
-      render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), document.getElementById("timezoneSelect").value);
+      render(
+        allEvents,
+        parseTimeRange(document.getElementById("timeFilter").value),
+        document.getElementById("timezoneSelect").value,
+        document.getElementById("dateFilter").value
+      );
     };
     document.getElementById("timeFilter").onkeydown = function(e) {
       if (e.key === "Enter") document.getElementById("filterBtn").click();
+    };
+    document.getElementById("dateFilter").onchange = function() {
+      render(
+        allEvents,
+        parseTimeRange(document.getElementById("timeFilter").value),
+        document.getElementById("timezoneSelect").value,
+        document.getElementById("dateFilter").value
+      );
     };
 
     // Populate timezone select
@@ -181,7 +194,12 @@
     tzSel.value = localTz;
 
     tzSel.onchange = function() {
-      render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), tzSel.value);
+      render(
+        allEvents,
+        parseTimeRange(document.getElementById("timeFilter").value),
+        tzSel.value,
+        document.getElementById("dateFilter").value
+      );
     };
 
     // ---- Luxon fallback warning ----
@@ -190,7 +208,13 @@
       let s = document.createElement("script");
       s.src = "https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js";
       s.onload = () => {
-        render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), document.getElementById("timezoneSelect").value);
+        updateDateDropdown(allEvents, document.getElementById("timezoneSelect").value);
+        render(
+          allEvents,
+          parseTimeRange(document.getElementById("timeFilter").value),
+          document.getElementById("timezoneSelect").value,
+          document.getElementById("dateFilter").value
+        );
       };
       document.head.appendChild(s);
     })();
@@ -206,13 +230,55 @@
         })
         .then(data => {
           allEvents = data;
-          render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), document.getElementById("timezoneSelect").value);
+          updateDateDropdown(allEvents, document.getElementById("timezoneSelect").value);
+          render(
+            allEvents,
+            parseTimeRange(document.getElementById("timeFilter").value),
+            document.getElementById("timezoneSelect").value,
+            document.getElementById("dateFilter").value
+          );
         })
         .catch(err => {
           status.textContent = "Failed to load all_schedules.json from server: " + err;
           document.getElementById("loading").style.display = "none";
         });
     }
+
+    // ---- Populate date dropdown ----
+    function updateDateDropdown(events, timezone) {
+      let dateSel = document.getElementById("dateFilter");
+      let daysSet = new Set();
+      events.forEach(ev => {
+        let localStart = toLocal(ev.start_time, timezone);
+        let dayKey = localStart.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        daysSet.add(dayKey);
+      });
+      let daysArr = Array.from(daysSet).sort((a, b) => {
+        let getDate = txt => {
+          // Use US format for parse safety
+          let d = new Date(txt.replace(/^(\w+), /, ""));
+          return d;
+        };
+        return getDate(a) - getDate(b);
+      });
+
+      // Save the currently selected value if possible
+      let prev = dateSel.value;
+      dateSel.innerHTML = `<option value="">All Dates</option>`;
+      daysArr.forEach(day => {
+        let opt = document.createElement("option");
+        opt.value = day;
+        opt.textContent = day;
+        dateSel.appendChild(opt);
+      });
+      if (prev && daysArr.includes(prev)) dateSel.value = prev;
+    }
+
+    // Whenever timezone changes, update date dropdown
+    document.getElementById("timezoneSelect").addEventListener("change", function() {
+      updateDateDropdown(allEvents, this.value);
+    });
+
     loadScheduleFromServer();
   </script>
 </body>
