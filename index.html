@@ -397,12 +397,13 @@
         filtered.push(ev);
 
         count++;
-        if (count % 32 === 0) await new Promise(r => setTimeout(r, 0));
+        if (count % 64 === 0) await new Promise(r => setTimeout(r, 0));
       }
       return filtered;
     }
 
-    function render(events, filterTimeRange, filterDayKey, filterPlace, searchText) {
+    // Async rendering: yield every 64 events rendered
+    async function renderAsync(events) {
       const scheduleDiv = document.getElementById("schedule");
       document.getElementById("loading").style.display = "none";
       if (!events.length) {
@@ -420,6 +421,7 @@
       }
 
       let html = "";
+      let renderedCount = 0;
       for (let day of Object.keys(days).sort((a, b) => {
         let getDate = txt => {
           let partes = txt.split(' ');
@@ -471,8 +473,22 @@
           </div>`;
         };
         // Render long events first, then normal
-        for (let ev of longEvents) html += renderEvent(ev);
-        for (let ev of normalEvents) html += renderEvent(ev);
+        for (let ev of longEvents) {
+          html += renderEvent(ev);
+          renderedCount++;
+          if (renderedCount % 64 === 0) {
+            scheduleDiv.innerHTML = html;
+            await new Promise(r => setTimeout(r, 0));
+          }
+        }
+        for (let ev of normalEvents) {
+          html += renderEvent(ev);
+          renderedCount++;
+          if (renderedCount % 64 === 0) {
+            scheduleDiv.innerHTML = html;
+            await new Promise(r => setTimeout(r, 0));
+          }
+        }
         html += "</div>";
       }
       scheduleDiv.innerHTML = html || "<p>Nenhum evento corresponde ao filtro.</p>";
@@ -582,7 +598,7 @@
     async function doFilterAsync(allEvents, filterTimeRange, filterDayKey, filterPlace, searchText) {
       // filter all items before render, yield every 32
       const filtered = await filterEventsAsync(allEvents, filterTimeRange, filterDayKey, filterPlace, searchText);
-      render(filtered, null, null, null, null); // rendering expects already filtered, so only pass filtered list
+      await renderAsync(filtered); // rendering is async, yields every 64 items
     }
 
     document.getElementById("filterBtn").onclick = function() {
