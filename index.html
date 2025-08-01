@@ -10,13 +10,43 @@
     .controls { margin-bottom: 2em; }
     label { margin-right: 1em; }
     .day { margin-top: 2em; }
-    .event { margin-left: 1em; margin-bottom: .8em; padding: .7em 1em; background: #fff; border-radius: 7px; box-shadow: 0 2px 8px #0001; }
+    .event { margin-left: 1em; margin-bottom: .8em; padding: .7em 1em; background: #fff; border-radius: 7px; box-shadow: 0 2px 8px #0001; cursor: pointer; transition: background 0.15s; }
+    .event:hover { background: #f0f3ff; }
     .event-title { font-weight: bold; }
     .event-place { color: #006; font-size: .95em; }
     #loading { color: #444; font-style: italic; }
+    /* Popup styles */
+    #popupOverlay {
+      display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.35); align-items: center; justify-content: center;
+    }
+    #popup {
+      background: #fff; border-radius: 12px; box-shadow: 0 12px 40px #0006;
+      padding: 2em; min-width: 320px; max-width: 96vw; max-height: 96vh; overflow-y: auto; position: relative;
+      animation: popupFadeIn 0.14s;
+    }
+    @keyframes popupFadeIn { from { transform: scale(0.96) translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+    #popupClose {
+      position: absolute; top: 0.5em; right: 0.7em; font-size: 2em; color: #888; background: none; border: none; cursor: pointer;
+    }
+    .popup-title { font-size: 1.3em; font-weight: bold; margin-bottom: 0.5em; }
+    .popup-time, .popup-place { color: #006; font-size: 1em; margin-bottom: 0.2em; }
+    .popup-description { margin: 1em 0; }
+    .popup-speakers { margin-top: 1em; }
+    .popup-speaker {
+      border-top: 1px solid #eee; padding-top: .7em; margin-top: .7em;
+      display: flex; align-items: flex-start; gap: 1em;
+    }
+    .popup-speaker-img {
+      width: 48px; height: 48px; border-radius: 50%; object-fit: cover; background: #eee;
+      display: inline-block;
+    }
+    .popup-speaker-info { font-size: .98em; }
+    .popup-speaker-name { font-weight: bold; }
     @media (max-width: 600px) {
       body { margin: .7em; }
       .event { padding: .6em; }
+      #popup { padding: 1em; min-width: 0; }
     }
   </style>
 </head>
@@ -33,14 +63,21 @@
       <input type="text" placeholder="e.g. 09:00 or 10:00-12:00" id="timeFilter" size="13">
     </label>
     <button id="filterBtn">Filter</button>
+    <span style="color: #555; font-size: 0.95em; margin-left: 1em;">Timezone: America/Sao_Paulo</span>
   </div>
   <div id="loading">Loading schedule from server...</div>
   <div id="schedule"></div>
+  <!-- Popup Overlay -->
+  <div id="popupOverlay">
+    <div id="popup">
+      <button id="popupClose" title="Close">&times;</button>
+      <div id="popupContent"></div>
+    </div>
+  </div>
   <script>
     // Use only America/Sao_Paulo timezone everywhere
     const FIXED_TIMEZONE = "America/Sao_Paulo";
 
-    // ---- Time filter parsing ----
     function parseTimeRange(str) {
       let s = str.trim();
       if (!s) return null;
@@ -61,9 +98,8 @@
     function localTimeToMinutes(d) {
       return d.getHours()*60 + d.getMinutes();
     }
-    // ---- Main rendering ----
+
     let allEvents = [];
-    let uniqueDays = [];
     function render(events, filterTimeRange, filterDayKey) {
       const scheduleDiv = document.getElementById("schedule");
       document.getElementById("loading").style.display = "none";
@@ -72,9 +108,7 @@
         return;
       }
 
-      // Sort by start_time
       events = events.slice().sort((a, b) => a.start_time.localeCompare(b.start_time));
-      // Group by day
       let days = {};
       events.forEach(ev => {
         let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
@@ -83,16 +117,12 @@
         days[dayKey].push(ev);
       });
 
-      // Filtering by date
       if (filterDayKey) {
         for (let day in days) {
-          if (day !== filterDayKey) {
-            delete days[day];
-          }
+          if (day !== filterDayKey) delete days[day];
         }
       }
 
-      // Filtering by time
       if (filterTimeRange) {
         const [startStr, endStr] = filterTimeRange;
         const startObj = parseHHMM(startStr);
@@ -116,7 +146,6 @@
         }
       }
 
-      // Render HTML
       let html = "";
       for (let day of Object.keys(days).sort((a, b) => {
         let getDate = txt => new Date(days[txt][0] ? toLocal(days[txt][0].start_time, FIXED_TIMEZONE).toDateString() : txt);
@@ -130,7 +159,7 @@
           let startStr = localStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           let endStr = localEnd.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           let place = ev.place || "<em>no place</em>";
-          html += `<div class="event">
+          html += `<div class="event" data-id="${ev.id}">
             <span class="event-title">${startStr} - ${endStr} | ${ev.title}</span>
             <div class="event-place">@ ${place}</div>
           </div>`;
@@ -138,6 +167,15 @@
         html += "</div>";
       }
       scheduleDiv.innerHTML = html || "<p>No events match the filter.</p>";
+
+      // Add event listeners for popups
+      document.querySelectorAll('.event').forEach(div => {
+        div.onclick = () => {
+          const eventId = Number(div.getAttribute('data-id'));
+          const event = allEvents.find(e => e.id === eventId);
+          showPopup(event);
+        };
+      });
     }
 
     function toLocal(isoString, timezone) {
@@ -147,6 +185,55 @@
         return new Date(isoString);
       }
     }
+
+    // ---- Popup logic ----
+    function showPopup(ev) {
+      if (!ev) return;
+      let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
+      let localEnd = toLocal(ev.end_time, FIXED_TIMEZONE);
+      let dateStr = localStart.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      let startStr = localStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      let endStr = localEnd.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+      let desc = ev.description && ev.description.trim() ? ev.description : "<em>No description provided.</em>";
+      let place = ev.place || "<em>no place</em>";
+
+      let speakersHtml = "";
+      if (ev.speakers && ev.speakers.length) {
+        speakersHtml = `<div class="popup-speakers"><strong>Speakers:</strong>`;
+        for (const s of ev.speakers) {
+          speakersHtml += `<div class="popup-speaker">`;
+          if (s.picture) {
+            speakersHtml += `<img class="popup-speaker-img" src="${s.picture}" alt="${s.name}">`;
+          } else {
+            speakersHtml += `<span class="popup-speaker-img" style="display:inline-block;background:#ccd;text-align:center;line-height:48px">${s.name ? s.name.charAt(0).toUpperCase() : '?'}</span>`;
+          }
+          speakersHtml += `<div class="popup-speaker-info">
+            <div class="popup-speaker-name">${s.name}</div>
+            ${s.role ? `<div>${s.role}</div>` : ""}
+            ${s.company ? `<div>${s.company}</div>` : ""}
+            ${s.bio ? `<div style="margin-top:0.3em">${s.bio}</div>` : ""}
+          </div></div>`;
+        }
+        speakersHtml += `</div>`;
+      }
+
+      let popupHtml = `
+        <div class="popup-title">${ev.title}</div>
+        <div class="popup-time">${dateStr}, ${startStr} - ${endStr}</div>
+        <div class="popup-place">@ ${place}</div>
+        <div class="popup-description">${desc}</div>
+        ${speakersHtml}
+      `;
+      document.getElementById('popupContent').innerHTML = popupHtml;
+      document.getElementById('popupOverlay').style.display = "flex";
+    }
+    document.getElementById("popupClose").onclick = function() {
+      document.getElementById('popupOverlay').style.display = "none";
+    };
+    document.getElementById("popupOverlay").onclick = function(e) {
+      if (e.target === this) this.style.display = "none";
+    };
 
     // ---- UI handlers ----
     document.getElementById("filterBtn").onclick = function() {
@@ -207,7 +294,6 @@
         });
     }
 
-    // ---- Populate date dropdown ----
     function updateDateDropdown(events, timezone) {
       let dateSel = document.getElementById("dateFilter");
       let daysSet = new Set();
@@ -224,7 +310,6 @@
         return getDate(a) - getDate(b);
       });
 
-      // Save the currently selected value if possible
       let prev = dateSel.value;
       dateSel.innerHTML = `<option value="">All Dates</option>`;
       daysArr.forEach(day => {
