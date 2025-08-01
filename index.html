@@ -14,6 +14,7 @@
     .event { margin-left: 1em; margin-bottom: .8em; padding: .7em 1em; background: #fff; border-radius: 7px; box-shadow: 0 2px 8px #0001; }
     .event-title { font-weight: bold; }
     .event-place { color: #006; font-size: .95em; }
+    #loading { color: #444; font-style: italic; }
     @media (max-width: 600px) {
       body { margin: .7em; }
       .event { padding: .6em; }
@@ -23,10 +24,7 @@
 <body>
   <h1>HackTown 2025 Schedule Viewer</h1>
   <div class="controls">
-    <label>
-      <b>Upload <code>all_schedules.json</code>:</b>
-      <input type="file" id="fileInput" accept=".json">
-    </label>
+    <span id="serverStatus"></span>
     <label>
       Time filter:
       <input type="text" placeholder="e.g. 09:00 or 10:00-12:00" id="timeFilter" size="13">
@@ -37,6 +35,7 @@
     </label>
     <button id="filterBtn">Filter</button>
   </div>
+  <div id="loading">Loading schedule from server...</div>
   <div id="schedule"></div>
   <script>
     // ---- Timezone helper ----
@@ -76,10 +75,10 @@
     }
     // ---- Main rendering ----
     let allEvents = [];
-    let lastJsonFilename = "";
     let lastTimezone = "";
     function render(events, filterTimeRange, timezone) {
       const scheduleDiv = document.getElementById("schedule");
+      document.getElementById("loading").style.display = "none";
       if (!events.length) {
         scheduleDiv.innerHTML = "<p>No data loaded.</p>";
         return;
@@ -162,22 +161,6 @@
     }
 
     // ---- UI handlers ----
-    document.getElementById("fileInput").addEventListener("change", e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      lastJsonFilename = file.name;
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        try {
-          allEvents = JSON.parse(evt.target.result);
-          render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), document.getElementById("timezoneSelect").value);
-        } catch (ex) {
-          alert("Could not parse JSON: " + ex);
-        }
-      };
-      reader.readAsText(file);
-    });
-
     document.getElementById("filterBtn").onclick = function() {
       render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), document.getElementById("timezoneSelect").value);
     };
@@ -211,6 +194,26 @@
       };
       document.head.appendChild(s);
     })();
+
+    // ---- Load all_schedules.json from server ----
+    function loadScheduleFromServer() {
+      const status = document.getElementById('serverStatus');
+      fetch('all_schedules.json')
+        .then(resp => {
+          if (!resp.ok) throw new Error("HTTP " + resp.status);
+          status.textContent = "Schedule loaded from server.";
+          return resp.json();
+        })
+        .then(data => {
+          allEvents = data;
+          render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), document.getElementById("timezoneSelect").value);
+        })
+        .catch(err => {
+          status.textContent = "Failed to load all_schedules.json from server: " + err;
+          document.getElementById("loading").style.display = "none";
+        });
+    }
+    loadScheduleFromServer();
   </script>
 </body>
 </html>
