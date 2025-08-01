@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HackTown 2025 Schedule Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2em; background: #f8f8fb; color: #222; }
+    h1 { font-size: 2em; }
+    .controls { margin-bottom: 2em; }
+    label { margin-right: 1em; }
+    input[type="file"] { margin-right: 2em; }
+    .day { margin-top: 2em; }
+    .event { margin-left: 1em; margin-bottom: .8em; padding: .7em 1em; background: #fff; border-radius: 7px; box-shadow: 0 2px 8px #0001; }
+    .event-title { font-weight: bold; }
+    .event-place { color: #006; font-size: .95em; }
+    @media (max-width: 600px) {
+      body { margin: .7em; }
+      .event { padding: .6em; }
+    }
+  </style>
+</head>
+<body>
+  <h1>HackTown 2025 Schedule Viewer</h1>
+  <div class="controls">
+    <label>
+      <b>Upload <code>all_schedules.json</code>:</b>
+      <input type="file" id="fileInput" accept=".json">
+    </label>
+    <label>
+      Time filter:
+      <input type="text" placeholder="e.g. 09:00 or 10:00-12:00" id="timeFilter" size="13">
+    </label>
+    <label>
+      <span>Timezone:</span>
+      <select id="timezoneSelect"></select>
+    </label>
+    <button id="filterBtn">Filter</button>
+  </div>
+  <div id="schedule"></div>
+  <script>
+    // ---- Timezone helper ----
+    function getTimezones() {
+      // Only a few main timezones for demo, but can be expanded.
+      return [
+        "America/Sao_Paulo", "America/Recife", "America/Belem", "America/Fortaleza",
+        "America/Manaus", "America/Cuiaba", "UTC", "Europe/Lisbon", "Europe/London",
+        "America/New_York", "America/Chicago", "America/Los_Angeles"
+      ];
+    }
+    function guessLocalTimezone() {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo";
+    }
+    // ---- Time filter parsing ----
+    function parseTimeRange(str) {
+      // Accepts: 08:00-12:00 or 10:00
+      let s = str.trim();
+      if (!s) return null;
+      if (s.includes('-')) {
+        let [start, end] = s.split('-').map(x => x.trim());
+        return [start, end];
+      } else {
+        return [s, s];
+      }
+    }
+    function parseHHMM(s) {
+      // Returns {h, m}
+      let [h, m] = s.split(':').map(Number);
+      return { h, m };
+    }
+    function timeObjToMinutes(timeObj) {
+      return timeObj.h * 60 + timeObj.m;
+    }
+    function localTimeToMinutes(d) {
+      return d.getHours()*60 + d.getMinutes();
+    }
+    // ---- Main rendering ----
+    let allEvents = [];
+    let lastJsonFilename = "";
+    let lastTimezone = "";
+    function render(events, filterTimeRange, timezone) {
+      const scheduleDiv = document.getElementById("schedule");
+      if (!events.length) {
+        scheduleDiv.innerHTML = "<p>No data loaded.</p>";
+        return;
+      }
+
+      // Sort by start_time
+      events = events.slice().sort((a, b) => a.start_time.localeCompare(b.start_time));
+      // Group by day
+      let days = {};
+      events.forEach(ev => {
+        let localStart = toLocal(ev.start_time, timezone);
+        let dayKey = localStart.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        if (!days[dayKey]) days[dayKey] = [];
+        days[dayKey].push(ev);
+      });
+
+      // Filtering
+      if (filterTimeRange) {
+        const [startStr, endStr] = filterTimeRange;
+        const startObj = parseHHMM(startStr);
+        const endObj = parseHHMM(endStr);
+        const startMin = timeObjToMinutes(startObj);
+        const endMin = timeObjToMinutes(endObj);
+
+        for (let day in days) {
+          days[day] = days[day].filter(ev => {
+            const startLocal = toLocal(ev.start_time, timezone);
+            const endLocal = toLocal(ev.end_time, timezone);
+            const evStartMin = localTimeToMinutes(startLocal);
+            const evEndMin = localTimeToMinutes(endLocal);
+
+            if (startMin === endMin) {
+              // Point: event covers that time?
+              return evStartMin <= startMin && startMin < evEndMin;
+            } else {
+              // Range: event overlaps with range?
+              return !(evEndMin <= startMin || evStartMin >= endMin);
+            }
+          });
+        }
+      }
+
+      // Render HTML
+      let html = "";
+      for (let day of Object.keys(days).sort((a, b) => {
+        // Sort by date (parse to Date)
+        let getDate = txt => new Date(days[txt][0] ? toLocal(days[txt][0].start_time, timezone).toDateString() : txt);
+        return getDate(a) - getDate(b);
+      })) {
+        if (!days[day].length) continue;
+        html += `<div class="day"><h2>${day}</h2>`;
+        for (let ev of days[day]) {
+          let localStart = toLocal(ev.start_time, timezone);
+          let localEnd = toLocal(ev.end_time, timezone);
+          let startStr = localStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          let endStr = localEnd.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          let place = ev.place || "<em>no place</em>";
+          html += `<div class="event">
+            <span class="event-title">${startStr} - ${endStr} | ${ev.title}</span>
+            <div class="event-place">@ ${place}</div>
+          </div>`;
+        }
+        html += "</div>";
+      }
+      scheduleDiv.innerHTML = html || "<p>No events match the filter.</p>";
+    }
+
+    function toLocal(isoString, timezone) {
+      // Returns a Date object in the target timezone, but JS Date is always in local.
+      // So we use the Date and format in that target timezone using Intl.
+      // For filtering, we use UTC and then format.
+      // But for time math, we must convert date to the timezone.
+      // We'll use luxon if available, else fallback.
+      if (window.luxon) {
+        return window.luxon.DateTime.fromISO(isoString, { zone: 'utc' }).setZone(timezone).toJSDate();
+      } else {
+        // Fallback: parse as Date (should be UTC), adjust offset manually
+        return new Date(isoString);
+      }
+    }
+
+    // ---- UI handlers ----
+    document.getElementById("fileInput").addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      lastJsonFilename = file.name;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          allEvents = JSON.parse(evt.target.result);
+          render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), document.getElementById("timezoneSelect").value);
+        } catch (ex) {
+          alert("Could not parse JSON: " + ex);
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById("filterBtn").onclick = function() {
+      render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), document.getElementById("timezoneSelect").value);
+    };
+    document.getElementById("timeFilter").onkeydown = function(e) {
+      if (e.key === "Enter") document.getElementById("filterBtn").click();
+    };
+
+    // Populate timezone select
+    let tzSel = document.getElementById("timezoneSelect");
+    let tzs = getTimezones();
+    let localTz = guessLocalTimezone();
+    for (let tz of tzs) {
+      let opt = document.createElement("option");
+      opt.value = tz;
+      opt.textContent = tz + (tz === localTz ? " (local)" : "");
+      tzSel.appendChild(opt);
+    }
+    tzSel.value = localTz;
+
+    tzSel.onchange = function() {
+      render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), tzSel.value);
+    };
+
+    // ---- Luxon fallback warning ----
+    (function addLuxonScript() {
+      if (window.luxon) return;
+      let s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js";
+      s.onload = () => {
+        render(allEvents, parseTimeRange(document.getElementById("timeFilter").value), document.getElementById("timezoneSelect").value);
+      };
+      document.head.appendChild(s);
+    })();
+  </script>
+</body>
+</html>
