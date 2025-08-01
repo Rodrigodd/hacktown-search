@@ -5,16 +5,64 @@
   <title>Buscador HackTown 2025</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2em; background: #f8f8fb; color: #222; }
+    html, body {
+      overflow-x: hidden;
+    }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2em;
+      background: #f8f8fb;
+      color: #222;
+    }
     h1 { font-size: 2em; }
     .controls { margin-bottom: 2em; }
     label { margin-right: 1em; }
     .day { margin-top: 2em; }
-    .event { margin-bottom: .8em; padding: .7em 1em; background: #fff; border-radius: 7px; box-shadow: 0 2px 8px #0001; cursor: pointer; transition: background 0.15s; }
+    .event { 
+      margin-bottom: .8em; 
+      padding: .7em 1em; 
+      background: #fff; 
+      border-radius: 7px; 
+      box-shadow: 0 2px 8px #0001; 
+      cursor: pointer; 
+      transition: background 0.15s; 
+      position: relative;
+    }
     .event:hover { background: #f0f3ff; }
     .event-title { font-weight: bold; }
     .event-place { color: #006; font-size: .95em; }
     .event-long { background: #fffbe6 !important; border: 1px solid #f6e6aa; }
+    .event-tags {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 0.25em;
+      margin-top: 0.18em;
+      margin-bottom: 0.18em;
+      max-width: 100%;
+      min-height: 28px;
+      align-items: center;
+      position: relative;
+      mask-image: linear-gradient(90deg, #000 60%, transparent);
+    }
+    .event-tags::-webkit-scrollbar { display: none; }
+    .event-tag {
+      display: inline-block;
+      background: #f6e6aa;
+      color: #6a4e00;
+      border-radius: 8px;
+      padding: 0.18em 0.7em;
+      font-size: 0.95em;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      border: 1px solid #f9dfa2;
+      white-space: nowrap;
+      margin-right: 0.15em;
+      margin-bottom: 0;
+      flex-shrink: 0;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     select {
       font-size: 1em;
       padding: 0.3em 0.6em;
@@ -384,11 +432,20 @@
           let place = ev.place && ev.place.trim() ? ev.place : "sem local definido";
           let durationMin = getDurationMinutes(ev);
           let isLong = durationMin > 120;
+          let tagsHtml = "";
+          if (ev.tags && Array.isArray(ev.tags) && ev.tags.length) {
+            tagsHtml = `<div class="event-tags">` +
+              ev.tags.map(tag =>
+                `<span class="event-tag">${tag.name || tag}</span>`
+              ).join('') +
+            `</div>`;
+          }
           html += `<div class="event${isLong ? ' event-long' : ''}" data-id="${ev.id}">
             <span class="event-title">
               <span style="color: gray;">${startStr} - ${endStr}</span> | ${ev.title}
             </span>
             <div class="event-place">${place}</div>
+            ${tagsHtml}
           </div>`;
         }
         html += "</div>";
@@ -423,14 +480,13 @@
       let desc = ev.description && ev.description.trim() ? ev.description : "<em>Nenhuma descrição disponível.</em>";
       let place = ev.place && ev.place.trim() ? ev.place : "<em>sem local definido</em>";
 
-      // Tags
       let tagsHtml = "";
       if (ev.tags && Array.isArray(ev.tags) && ev.tags.length) {
-        tagsHtml = `<div class="popup-tags">`;
-        tagsHtml += ev.tags.map(tag =>
-          `<span class="popup-tag">${tag.name || tag}</span>`
-        ).join('');
-        tagsHtml += `</div>`;
+        tagsHtml = `<div class="popup-tags">` +
+          ev.tags.map(tag =>
+            `<span class="popup-tag">${tag.name || tag}</span>`
+          ).join('') +
+        `</div>`;
       }
 
       let speakersHtml = "";
