@@ -59,12 +59,40 @@
       background: #fff; border-radius: 12px; box-shadow: 0 12px 40px #0006;
       padding: 2em; min-width: 320px; max-width: 96vw; max-height: 96vh; overflow-y: auto; position: relative;
       animation: popupFadeIn 0.14s;
+      /* Adicionado para layout flexível da barra superior */
+      display: flex;
+      flex-direction: column;
+      gap: 0.6em;
     }
     @keyframes popupFadeIn { from { transform: scale(0.96) translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
-    #popupClose {
-      position: absolute; top: 0.5em; right: 0.7em; font-size: 2em; color: #888; background: none; border: none; cursor: pointer;
+    /* Barra superior do popup para título e botão */
+    .popup-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1em;
     }
-    .popup-title { font-size: 1.3em; font-weight: bold; margin-bottom: 0.5em; }
+    #popupClose {
+      font-size: 2em;
+      color: #888;
+      background: none;
+      border: none;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 0.3em;
+      margin-left: 1em;
+      margin-top: -0.3em;
+      flex-shrink: 0;
+    }
+    .popup-title {
+      font-size: 1.3em;
+      font-weight: bold;
+      margin-bottom: 0.5em;
+      margin-top: 0;
+      line-height: 1.25;
+      flex: 1 1 auto;
+      word-break: break-word;
+    }
     .popup-time, .popup-place { color: #006; font-size: 1em; margin-bottom: 0.2em; }
     .popup-description { margin: 1em 0; }
     .popup-speakers { margin-top: 1em; }
@@ -83,6 +111,8 @@
       .event { padding: .6em; }
       #popup { padding: 1em; min-width: 0; }
       .search-box input { width: 98vw; }
+      .popup-title { font-size: 1.1em; }
+      #popupClose { font-size: 1.5em; }
     }
   </style>
 </head>
@@ -98,20 +128,18 @@
     </div>
     <div>
       <label>
-        Horário:
-        <input type="text" placeholder="ex: 09:00 ou 10:00-12:00" id="timeFilter" size="13">
-      </label>
-    </div>
-    <div>
-      <label>
         Data:
         <select id="dateFilter" style="max-width: 100%; overflow-x: auto;"><option value="">Todas as Datas</option></select>
       </label>
-    </div>
-    <div>
       <label>
         Lugar:
         <select id="placeFilter" style="max-width: 100%; overflow-x: auto;"><option value="">Todos os Lugares</option></select>
+      </label>
+    </div>
+    <div>
+      <label>
+        Horário:
+        <input type="text" placeholder="ex: 09:00 ou 10:00-12:00" id="timeFilter" size="13">
       </label>
     </div>
     <button id="filterBtn">Filtrar</button>
@@ -125,7 +153,10 @@
   <!-- Popup Overlay -->
   <div id="popupOverlay">
     <div id="popup">
-      <button id="popupClose" title="Fechar">&times;</button>
+      <div class="popup-header">
+        <div class="popup-title" id="popupTitle"></div>
+        <button id="popupClose" title="Fechar">&times;</button>
+      </div>
       <div id="popupContent"></div>
     </div>
   </div>
@@ -324,8 +355,10 @@
         speakersHtml += `</div>`;
       }
 
+      // título separado para garantir espaço para o botão
+      document.getElementById('popupTitle').innerHTML = ev.title;
+
       let popupHtml = `
-        <div class="popup-title">${ev.title}</div>
         <div class="popup-time">${dateStr}, ${startStr} - ${endStr}</div>
         <div class="popup-place">${place}</div>
         <div class="popup-description">${desc}</div>
