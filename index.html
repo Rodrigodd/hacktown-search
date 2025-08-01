@@ -327,22 +327,28 @@
 
     function eventMatchesSearch(ev, search) {
       if (!search) return true;
-      const q = search.toLowerCase();
-      if (ev.title && ev.title.toLowerCase().includes(q)) return true;
-      if (ev.place && ev.place.toLowerCase().includes(q)) return true;
+      const parts = search.toLowerCase().split(/\s+/).filter(Boolean);
+      // Gather searchable fields as lowercased strings
+      const searchFields = [];
+      if (ev.title) searchFields.push(ev.title.toLowerCase());
+      if (ev.place) searchFields.push(ev.place.toLowerCase());
+      if (ev.description) searchFields.push(ev.description.toLowerCase());
       if (ev.speakers && Array.isArray(ev.speakers)) {
         for (const s of ev.speakers) {
-          if (s.name && s.name.toLowerCase().includes(q)) return true;
+          if (s.name) searchFields.push(s.name.toLowerCase());
         }
       }
       if (ev.tags && Array.isArray(ev.tags)) {
         for (const t of ev.tags) {
-          if (t.name && t.name.toLowerCase().includes(q)) return true;
+          if (t.name) searchFields.push(t.name.toLowerCase());
         }
       }
-      if (ev.description && ev.description.toLowerCase().includes(q)) return true;
-      return false;
+      // Every part must be included in at least one field
+      return parts.every(part =>
+        searchFields.some(field => field.includes(part))
+      );
     }
+
 
     function getDurationMinutes(ev) {
       const start = toLocal(ev.start_time, FIXED_TIMEZONE);
