@@ -48,5 +48,5 @@ if __name__ == "__main__":
     # Example: Save to file as JSON
     import json
     with open("all_schedules.json", "w", encoding="utf-8") as f:
-        json.dump(schedules, f, ensure_ascii=False, indent=2)
+        json.dump(schedules, f, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     print("All schedules saved to all_schedules.json")
