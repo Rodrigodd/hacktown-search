@@ -10,7 +10,7 @@
     .controls { margin-bottom: 2em; }
     label { margin-right: 1em; }
     .day { margin-top: 2em; }
-    .event { margin-left: 1em; margin-bottom: .8em; padding: .7em 1em; background: #fff; border-radius: 7px; box-shadow: 0 2px 8px #0001; cursor: pointer; transition: background 0.15s; }
+    .event { margin-bottom: .8em; padding: .7em 1em; background: #fff; border-radius: 7px; box-shadow: 0 2px 8px #0001; cursor: pointer; transition: background 0.15s; }
     .event:hover { background: #f0f3ff; }
     .event-title { font-weight: bold; }
     .event-place { color: #006; font-size: .95em; }
@@ -81,7 +81,13 @@
     <div>
       <label>
         Data:
-        <select id="dateFilter"><option value="">Todas as Datas</option></select>
+        <select id="dateFilter" style="max-width: 100%; overflow-x: auto;"><option value="">Todas as Datas</option></select>
+      </label>
+    </div>
+    <div>
+      <label>
+        Lugar:
+        <select id="placeFilter" style="max-width: 100%; overflow-x: auto;"><option value="">Todos os Lugares</option></select>
       </label>
     </div>
     <div>
@@ -139,12 +145,21 @@
     }
 
     let allEvents = [];
-    function render(events, filterTimeRange, filterDayKey) {
+    function render(events, filterTimeRange, filterDayKey, filterPlace) {
       const scheduleDiv = document.getElementById("schedule");
       document.getElementById("loading").style.display = "none";
       if (!events.length) {
         scheduleDiv.innerHTML = "<p>Nenhum dado carregado.</p>";
         return;
+      }
+
+      // Filtro de lugar
+      if (filterPlace) {
+        events = events.filter(ev => {
+          // Considera "sem local definido" para lugares nulos/vazios
+          let place = ev.place && ev.place.trim() ? ev.place.trim() : "sem local definido";
+          return place === filterPlace;
+        });
       }
 
       events = events.slice().sort((a, b) => a.start_time.localeCompare(b.start_time));
@@ -203,10 +218,12 @@
           let localEnd = toLocal(ev.end_time, FIXED_TIMEZONE);
           let startStr = localStart.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
           let endStr = localEnd.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
-          let place = ev.place || "<em>sem local definido</em>";
+          let place = ev.place && ev.place.trim() ? ev.place : "sem local definido";
           html += `<div class="event" data-id="${ev.id}">
-            <span class="event-title">${startStr} - ${endStr} | ${ev.title}</span>
-            <div class="event-place">@ ${place}</div>
+            <span class="event-title">
+              <span style="color: gray;">${startStr} - ${endStr}</span> | ${ev.title}
+            </span>
+            <div class="event-place">${place}</div>
           </div>`;
         }
         html += "</div>";
@@ -239,7 +256,7 @@
       let endStr = localEnd.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
 
       let desc = ev.description && ev.description.trim() ? ev.description : "<em>Nenhuma descrição disponível.</em>";
-      let place = ev.place || "<em>sem local definido</em>";
+      let place = ev.place && ev.place.trim() ? ev.place : "<em>sem local definido</em>";
 
       let speakersHtml = "";
       if (ev.speakers && ev.speakers.length) {
@@ -264,7 +281,7 @@
       let popupHtml = `
         <div class="popup-title">${ev.title}</div>
         <div class="popup-time">${dateStr}, ${startStr} - ${endStr}</div>
-        <div class="popup-place">@ ${place}</div>
+        <div class="popup-place">${place}</div>
         <div class="popup-description">${desc}</div>
         ${speakersHtml}
       `;
@@ -282,7 +299,8 @@
       render(
         allEvents,
         parseTimeRange(document.getElementById("timeFilter").value),
-        document.getElementById("dateFilter").value
+        document.getElementById("dateFilter").value,
+        document.getElementById("placeFilter").value
       );
     };
     document.getElementById("timeFilter").onkeydown = function(e) {
@@ -292,7 +310,16 @@
       render(
         allEvents,
         parseTimeRange(document.getElementById("timeFilter").value),
-        document.getElementById("dateFilter").value
+        document.getElementById("dateFilter").value,
+        document.getElementById("placeFilter").value
+      );
+    };
+    document.getElementById("placeFilter").onchange = function() {
+      render(
+        allEvents,
+        parseTimeRange(document.getElementById("timeFilter").value),
+        document.getElementById("dateFilter").value,
+        document.getElementById("placeFilter").value
       );
     };
 
@@ -302,10 +329,12 @@
       s.src = "https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js";
       s.onload = () => {
         updateDateDropdown(allEvents, FIXED_TIMEZONE);
+        updatePlaceDropdown(allEvents);
         render(
           allEvents,
           parseTimeRange(document.getElementById("timeFilter").value),
-          document.getElementById("dateFilter").value
+          document.getElementById("dateFilter").value,
+          document.getElementById("placeFilter").value
         );
       };
       document.head.appendChild(s);
@@ -363,6 +392,25 @@
       }
     }
 
+    function updatePlaceDropdown(events) {
+      let placeSel = document.getElementById("placeFilter");
+      let placesSet = new Set();
+      events.forEach(ev => {
+        let place = ev.place && ev.place.trim() ? ev.place.trim() : "sem local definido";
+        placesSet.add(place);
+      });
+      let placesArr = Array.from(placesSet).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      let prev = placeSel.value;
+      placeSel.innerHTML = `<option value="">Todos os Lugares</option>`;
+      placesArr.forEach(place => {
+        let opt = document.createElement("option");
+        opt.value = place;
+        opt.textContent = place.charAt(0).toUpperCase() + place.slice(1);
+        placeSel.appendChild(opt);
+      });
+      if (prev && placesArr.includes(prev)) placeSel.value = prev;
+    }
+
     function setProgressBar(percent, msg) {
       const barContainer = document.getElementById('progress-bar-container');
       const bar = document.getElementById('progress-bar');
@@ -379,13 +427,11 @@
       }
     }
 
-    // Download com barra de progresso
     function loadScheduleFromServer() {
       const status = document.getElementById('serverStatus');
       const loading = document.getElementById('loading');
       setProgressBar(0, "Baixando agenda...");
       loading.style.display = "block";
-      // Utiliza XMLHttpRequest para progresso
       var xhr = new XMLHttpRequest();
       xhr.open('GET', 'all_schedules.json', true);
       xhr.responseType = 'text';
@@ -416,10 +462,12 @@
         try {
           allEvents = JSON.parse(xhr.responseText);
           updateDateDropdown(allEvents, FIXED_TIMEZONE);
+          updatePlaceDropdown(allEvents);
           render(
             allEvents,
             parseTimeRange(document.getElementById("timeFilter").value),
-            document.getElementById("dateFilter").value
+            document.getElementById("dateFilter").value,
+            document.getElementById("placeFilter").value
           );
         } catch (e) {
           status.textContent = "Erro ao processar JSON da agenda: " + e;
