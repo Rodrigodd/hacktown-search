@@ -420,11 +420,21 @@
       })) {
         if (!days[day].length) continue;
 
+        // Split into long and normal events for this day
         let dayEvents = days[day].slice();
-        dayEvents.sort((evA, evB) => getDurationMinutes(evB) - getDurationMinutes(evA));
+        let longEvents = [];
+        let normalEvents = [];
+        for (let ev of dayEvents) {
+          const durationMin = getDurationMinutes(ev);
+          if (durationMin > 120) {
+            longEvents.push(ev);
+          } else {
+            normalEvents.push(ev);
+          }
+        }
 
         html += `<div class="day"><h2>${day.charAt(0).toUpperCase() + day.slice(1)}</h2>`;
-        for (let ev of dayEvents) {
+        const renderEvent = ev => {
           let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
           let localEnd = toLocal(ev.end_time, FIXED_TIMEZONE);
           let startStr = localStart.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
@@ -440,14 +450,17 @@
               ).join('') +
             `</div>`;
           }
-          html += `<div class="event${isLong ? ' event-long' : ''}" data-id="${ev.id}">
+          return `<div class="event${isLong ? ' event-long' : ''}" data-id="${ev.id}">
             <span class="event-title">
               <span style="color: gray;">${startStr} - ${endStr}</span> | ${ev.title}
             </span>
             <div class="event-place">${place}</div>
             ${tagsHtml}
           </div>`;
-        }
+        };
+        // Render long events first, then normal
+        for (let ev of longEvents) html += renderEvent(ev);
+        for (let ev of normalEvents) html += renderEvent(ev);
         html += "</div>";
       }
       scheduleDiv.innerHTML = html || "<p>Nenhum evento corresponde ao filtro.</p>";
