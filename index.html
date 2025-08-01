@@ -85,7 +85,6 @@
     .search-box input[type="text"] {
       width: 230px;
     }
-    /* New: Make filter fields fill the remaining space horizontally */
     .filter-row {
       display: flex;
       gap: 0.8em;
@@ -111,7 +110,6 @@
     .filter-row button {
       flex-shrink: 0;
     }
-    /* Popup styles */
     #popupOverlay {
       display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100vw; height: 100vh;
       background: rgba(0,0,0,0.35); align-items: center; justify-content: center;
@@ -120,13 +118,11 @@
       background: #fff; border-radius: 12px; box-shadow: 0 12px 40px #0006;
       padding: 2em; min-width: 320px; max-width: 96vw; max-height: 96vh; overflow-y: auto; position: relative;
       animation: popupFadeIn 0.14s;
-      /* Adicionado para layout flexível da barra superior */
       display: flex;
       flex-direction: column;
       gap: 0.6em;
     }
     @keyframes popupFadeIn { from { transform: scale(0.96) translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
-    /* Barra superior do popup para título e botão */
     .popup-header {
       display: flex;
       align-items: flex-start;
@@ -249,7 +245,6 @@
       return d.getHours()*60 + d.getMinutes();
     }
 
-    // Traduções de dias da semana e meses para português
     const diasSemana = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
     const mesesAno = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
     function formatarDataPortugues(date) {
@@ -259,26 +254,26 @@
     }
 
     let allEvents = [];
+
+    // Async filter control
+    let filterTask = null;        // currently running promise
+    let pendingFilter = null;     // latest pending params, if any
+
     function eventMatchesSearch(ev, search) {
       if (!search) return true;
       const q = search.toLowerCase();
-      // title
       if (ev.title && ev.title.toLowerCase().includes(q)) return true;
-      // place
       if (ev.place && ev.place.toLowerCase().includes(q)) return true;
-      // speakers[].name
       if (ev.speakers && Array.isArray(ev.speakers)) {
         for (const s of ev.speakers) {
           if (s.name && s.name.toLowerCase().includes(q)) return true;
         }
       }
-      // tags[].name
       if (ev.tags && Array.isArray(ev.tags)) {
         for (const t of ev.tags) {
           if (t.name && t.name.toLowerCase().includes(q)) return true;
         }
       }
-      // description
       if (ev.description && ev.description.toLowerCase().includes(q)) return true;
       return false;
     }
@@ -291,7 +286,6 @@
         return;
       }
 
-      // Filtro de lugar
       if (filterPlace) {
         events = events.filter(ev => {
           let place = ev.place && ev.place.trim() ? ev.place.trim() : "sem local definido";
@@ -299,7 +293,6 @@
         });
       }
 
-      // Filtro de busca
       if (searchText && searchText.trim()) {
         events = events.filter(ev => eventMatchesSearch(ev, searchText));
       }
@@ -420,7 +413,6 @@
         speakersHtml += `</div>`;
       }
 
-      // título separado para garantir espaço para o botão
       document.getElementById('popupTitle').innerHTML = ev.title;
 
       let popupHtml = `
@@ -439,45 +431,52 @@
       if (e.target === this) this.style.display = "none";
     };
 
-    document.getElementById("filterBtn").onclick = function() {
-      render(
+    // Async filter logic
+    function filterAsync() {
+      const args = [
         allEvents,
         parseTimeRange(document.getElementById("timeFilter").value),
         document.getElementById("dateFilter").value,
         document.getElementById("placeFilter").value,
         document.getElementById("searchInput").value
-      );
+      ];
+      scheduleFilterAsync(...args);
+    }
+
+    // Only one filter runs at a time; if another is requested during work, the latest wins.
+    function scheduleFilterAsync(...args) {
+      // If none is running, run now
+      if (!filterTask) {
+        filterTask = doFilterAsync(...args).then(() => {
+          filterTask = null;
+          // If new pending, run it (and clear pending)
+          if (pendingFilter) {
+            const next = pendingFilter;
+            pendingFilter = null;
+            scheduleFilterAsync(...next);
+          }
+        });
+      } else {
+        // Replace any pending filter with the latest request
+        pendingFilter = args;
+      }
+    }
+
+    async function doFilterAsync(...args) {
+      // Artificially yield to simulate async, so UI events update
+      await new Promise(r => setTimeout(r, 0));
+      render(...args);
+    }
+
+    document.getElementById("filterBtn").onclick = function() {
+      filterAsync();
     };
     document.getElementById("timeFilter").onkeydown = function(e) {
-      if (e.key === "Enter") document.getElementById("filterBtn").click();
+      if (e.key === "Enter") filterAsync();
     };
-    document.getElementById("dateFilter").onchange = function() {
-      render(
-        allEvents,
-        parseTimeRange(document.getElementById("timeFilter").value),
-        document.getElementById("dateFilter").value,
-        document.getElementById("placeFilter").value,
-        document.getElementById("searchInput").value
-      );
-    };
-    document.getElementById("placeFilter").onchange = function() {
-      render(
-        allEvents,
-        parseTimeRange(document.getElementById("timeFilter").value),
-        document.getElementById("dateFilter").value,
-        document.getElementById("placeFilter").value,
-        document.getElementById("searchInput").value
-      );
-    };
-    document.getElementById("searchInput").oninput = function() {
-      render(
-        allEvents,
-        parseTimeRange(document.getElementById("timeFilter").value),
-        document.getElementById("dateFilter").value,
-        document.getElementById("placeFilter").value,
-        document.getElementById("searchInput").value
-      );
-    };
+    document.getElementById("dateFilter").onchange = filterAsync;
+    document.getElementById("placeFilter").onchange = filterAsync;
+    document.getElementById("searchInput").oninput = filterAsync;
 
     (function addLuxonScript() {
       if (window.luxon) return;
@@ -486,13 +485,7 @@
       s.onload = () => {
         updateDateDropdown(allEvents, FIXED_TIMEZONE);
         updatePlaceDropdown(allEvents);
-        render(
-          allEvents,
-          parseTimeRange(document.getElementById("timeFilter").value),
-          document.getElementById("dateFilter").value,
-          document.getElementById("placeFilter").value,
-          document.getElementById("searchInput").value
-        );
+        filterAsync();
       };
       document.head.appendChild(s);
     })();
@@ -619,13 +612,7 @@
           allEvents = JSON.parse(xhr.responseText);
           updateDateDropdown(allEvents, FIXED_TIMEZONE);
           updatePlaceDropdown(allEvents);
-          render(
-            allEvents,
-            parseTimeRange(document.getElementById("timeFilter").value),
-            document.getElementById("dateFilter").value,
-            document.getElementById("placeFilter").value,
-            document.getElementById("searchInput").value
-          );
+          filterAsync();
         } catch (e) {
           status.textContent = "Erro ao processar JSON da agenda: " + e;
         }
