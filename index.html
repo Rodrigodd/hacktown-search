@@ -14,6 +14,42 @@
     .event:hover { background: #f0f3ff; }
     .event-title { font-weight: bold; }
     .event-place { color: #006; font-size: .95em; }
+    select {
+      font-size: 1em;
+      padding: 0.3em 0.6em;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      background: #fff;
+      cursor: pointer;
+      min-width: 0;
+      flex: 1 1 0;
+    }
+    button {
+      font-size: 1em;
+      padding: 0.5em 1em;
+      border-radius: 5px;
+      border: none;
+      background: #0056cc;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    input[type="text"] {
+      font-size: 1em;
+      padding: 0.3em 0.6em;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      min-width: 0;
+      flex: 1 1 0;
+      box-sizing: border-box;
+    }
+    input[type="text"]:focus {
+      border-color: #0056cc;
+      outline: none;
+    }
+    button:hover {
+      background: #003d99;
+    }
     #loading { color: #444; font-style: italic; }
     #progress-bar-container {
       width: 100%;
@@ -41,14 +77,39 @@
     }
     .search-box {
       margin-bottom: 1em;
+      display: flex;
+      gap: 0.8em;
+      flex-wrap: wrap;
+      align-items: center;
     }
-    .search-box input {
-      font-size: 1em;
-      padding: 0.3em 0.6em;
-      border-radius: 5px;
-      border: 1px solid #ccc;
+    .search-box input[type="text"] {
       width: 230px;
-      max-width: 80vw;
+    }
+    /* New: Make filter fields fill the remaining space horizontally */
+    .filter-row {
+      display: flex;
+      gap: 0.8em;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 0.7em;
+    }
+    .filter-row label {
+      display: flex;
+      align-items: center;
+      flex: 1 1 0;
+      min-width: 0;
+      gap: 0.4em;
+    }
+    .filter-row select,
+    .filter-row input[type="text"] {
+      width: 100%;
+      min-width: 0;
+      flex: 1 1 0;
+      box-sizing: border-box;
+      max-width: 100%;
+    }
+    .filter-row button {
+      flex-shrink: 0;
     }
     /* Popup styles */
     #popupOverlay {
@@ -113,6 +174,15 @@
       .search-box input { width: 98vw; }
       .popup-title { font-size: 1.1em; }
       #popupClose { font-size: 1.5em; }
+      .filter-row {
+        flex-direction: column;
+        gap: .6em;
+      }
+      .filter-row label {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+      }
     }
   </style>
 </head>
@@ -120,29 +190,24 @@
   <h1>Visualizador de Agenda HackTown 2025</h1>
   <div class="controls">
     <span id="serverStatus"></span>
-    <div class="search-box">
+    <form class="search-box" onsubmit="return false;">
+      <input type="text" id="searchInput" placeholder="Filtrar por título, local, palestrante, tag..." autocomplete="off">
+    </form>
+    <div class="filter-row">
       <label>
-        Pesquisar:
-        <input type="text" id="searchInput" placeholder="Filtrar por título, local, palestrante, tag..." autocomplete="off">
+        Horário:
+        <input type="text" placeholder="ex: 09:00 ou 10:00-12:00" id="timeFilter" size="10">
       </label>
-    </div>
-    <div>
       <label>
         Data:
-        <select id="dateFilter" style="max-width: 100%; overflow-x: auto;"><option value="">Todas as Datas</option></select>
+        <select id="dateFilter"><option value="">Todas as Datas</option></select>
       </label>
       <label>
         Lugar:
-        <select id="placeFilter" style="max-width: 100%; overflow-x: auto;"><option value="">Todos os Lugares</option></select>
+        <select id="placeFilter"><option value="">Todos os Lugares</option></select>
       </label>
+      <button id="filterBtn">Filtrar</button>
     </div>
-    <div>
-      <label>
-        Horário:
-        <input type="text" placeholder="ex: 09:00 ou 10:00-12:00" id="timeFilter" size="13">
-      </label>
-    </div>
-    <button id="filterBtn">Filtrar</button>
   </div>
   <div id="loading">Carregando agenda do servidor...</div>
   <div id="progress-bar-container">
