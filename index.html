@@ -14,6 +14,7 @@
     .event:hover { background: #f0f3ff; }
     .event-title { font-weight: bold; }
     .event-place { color: #006; font-size: .95em; }
+    .event-long { background: #fffbe6 !important; border: 1px solid #f6e6aa; }
     select {
       font-size: 1em;
       padding: 0.3em 0.6em;
@@ -180,6 +181,10 @@
         align-items: stretch;
       }
     }
+    .event-long {
+      background: #fffbe6 !important;
+      border: 1px solid #f6e6aa;
+    }
   </style>
 </head>
 <body>
@@ -256,8 +261,8 @@
     let allEvents = [];
 
     // Async filter control
-    let filterTask = null;        // currently running promise
-    let pendingFilter = null;     // latest pending params, if any
+    let filterTask = null;
+    let pendingFilter = null;
 
     function eventMatchesSearch(ev, search) {
       if (!search) return true;
@@ -276,6 +281,12 @@
       }
       if (ev.description && ev.description.toLowerCase().includes(q)) return true;
       return false;
+    }
+
+    function getDurationMinutes(ev) {
+      const start = toLocal(ev.start_time, FIXED_TIMEZONE);
+      const end = toLocal(ev.end_time, FIXED_TIMEZONE);
+      return (end - start) / (1000 * 60);
     }
 
     function render(events, filterTimeRange, filterDayKey, filterPlace, searchText) {
@@ -297,7 +308,7 @@
         events = events.filter(ev => eventMatchesSearch(ev, searchText));
       }
 
-      events = events.slice().sort((a, b) => a.start_time.localeCompare(b.start_time));
+      events = events.slice();
       let days = {};
       events.forEach(ev => {
         let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
@@ -347,14 +358,21 @@
         return getDate(a) - getDate(b);
       })) {
         if (!days[day].length) continue;
+
+        // Sort events in this day by duration (descending)
+        let dayEvents = days[day].slice();
+        dayEvents.sort((evA, evB) => getDurationMinutes(evB) - getDurationMinutes(evA));
+
         html += `<div class="day"><h2>${day.charAt(0).toUpperCase() + day.slice(1)}</h2>`;
-        for (let ev of days[day]) {
+        for (let ev of dayEvents) {
           let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
           let localEnd = toLocal(ev.end_time, FIXED_TIMEZONE);
           let startStr = localStart.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
           let endStr = localEnd.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" });
           let place = ev.place && ev.place.trim() ? ev.place : "sem local definido";
-          html += `<div class="event" data-id="${ev.id}">
+          let durationMin = getDurationMinutes(ev);
+          let isLong = durationMin > 120;
+          html += `<div class="event${isLong ? ' event-long' : ''}" data-id="${ev.id}">
             <span class="event-title">
               <span style="color: gray;">${startStr} - ${endStr}</span> | ${ev.title}
             </span>
@@ -443,13 +461,10 @@
       scheduleFilterAsync(...args);
     }
 
-    // Only one filter runs at a time; if another is requested during work, the latest wins.
     function scheduleFilterAsync(...args) {
-      // If none is running, run now
       if (!filterTask) {
         filterTask = doFilterAsync(...args).then(() => {
           filterTask = null;
-          // If new pending, run it (and clear pending)
           if (pendingFilter) {
             const next = pendingFilter;
             pendingFilter = null;
@@ -457,13 +472,11 @@
           }
         });
       } else {
-        // Replace any pending filter with the latest request
         pendingFilter = args;
       }
     }
 
     async function doFilterAsync(...args) {
-      // Artificially yield to simulate async, so UI events update
       await new Promise(r => setTimeout(r, 0));
       render(...args);
     }
