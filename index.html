@@ -32,26 +32,14 @@
       Time filter:
       <input type="text" placeholder="e.g. 09:00 or 10:00-12:00" id="timeFilter" size="13">
     </label>
-    <label>
-      <span>Timezone:</span>
-      <select id="timezoneSelect"></select>
-    </label>
     <button id="filterBtn">Filter</button>
   </div>
   <div id="loading">Loading schedule from server...</div>
   <div id="schedule"></div>
   <script>
-    // ---- Timezone helper ----
-    function getTimezones() {
-      return [
-        "America/Sao_Paulo", "America/Recife", "America/Belem", "America/Fortaleza",
-        "America/Manaus", "America/Cuiaba", "UTC", "Europe/Lisbon", "Europe/London",
-        "America/New_York", "America/Chicago", "America/Los_Angeles"
-      ];
-    }
-    function guessLocalTimezone() {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo";
-    }
+    // Use only America/Sao_Paulo timezone everywhere
+    const FIXED_TIMEZONE = "America/Sao_Paulo";
+
     // ---- Time filter parsing ----
     function parseTimeRange(str) {
       let s = str.trim();
@@ -76,7 +64,7 @@
     // ---- Main rendering ----
     let allEvents = [];
     let uniqueDays = [];
-    function render(events, filterTimeRange, timezone, filterDayKey) {
+    function render(events, filterTimeRange, filterDayKey) {
       const scheduleDiv = document.getElementById("schedule");
       document.getElementById("loading").style.display = "none";
       if (!events.length) {
@@ -89,7 +77,7 @@
       // Group by day
       let days = {};
       events.forEach(ev => {
-        let localStart = toLocal(ev.start_time, timezone);
+        let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
         let dayKey = localStart.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
         if (!days[dayKey]) days[dayKey] = [];
         days[dayKey].push(ev);
@@ -114,8 +102,8 @@
 
         for (let day in days) {
           days[day] = days[day].filter(ev => {
-            const startLocal = toLocal(ev.start_time, timezone);
-            const endLocal = toLocal(ev.end_time, timezone);
+            const startLocal = toLocal(ev.start_time, FIXED_TIMEZONE);
+            const endLocal = toLocal(ev.end_time, FIXED_TIMEZONE);
             const evStartMin = localTimeToMinutes(startLocal);
             const evEndMin = localTimeToMinutes(endLocal);
 
@@ -131,14 +119,14 @@
       // Render HTML
       let html = "";
       for (let day of Object.keys(days).sort((a, b) => {
-        let getDate = txt => new Date(days[txt][0] ? toLocal(days[txt][0].start_time, timezone).toDateString() : txt);
+        let getDate = txt => new Date(days[txt][0] ? toLocal(days[txt][0].start_time, FIXED_TIMEZONE).toDateString() : txt);
         return getDate(a) - getDate(b);
       })) {
         if (!days[day].length) continue;
         html += `<div class="day"><h2>${day}</h2>`;
         for (let ev of days[day]) {
-          let localStart = toLocal(ev.start_time, timezone);
-          let localEnd = toLocal(ev.end_time, timezone);
+          let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
+          let localEnd = toLocal(ev.end_time, FIXED_TIMEZONE);
           let startStr = localStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           let endStr = localEnd.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           let place = ev.place || "<em>no place</em>";
@@ -165,7 +153,6 @@
       render(
         allEvents,
         parseTimeRange(document.getElementById("timeFilter").value),
-        document.getElementById("timezoneSelect").value,
         document.getElementById("dateFilter").value
       );
     };
@@ -176,28 +163,6 @@
       render(
         allEvents,
         parseTimeRange(document.getElementById("timeFilter").value),
-        document.getElementById("timezoneSelect").value,
-        document.getElementById("dateFilter").value
-      );
-    };
-
-    // Populate timezone select
-    let tzSel = document.getElementById("timezoneSelect");
-    let tzs = getTimezones();
-    let localTz = guessLocalTimezone();
-    for (let tz of tzs) {
-      let opt = document.createElement("option");
-      opt.value = tz;
-      opt.textContent = tz + (tz === localTz ? " (local)" : "");
-      tzSel.appendChild(opt);
-    }
-    tzSel.value = localTz;
-
-    tzSel.onchange = function() {
-      render(
-        allEvents,
-        parseTimeRange(document.getElementById("timeFilter").value),
-        tzSel.value,
         document.getElementById("dateFilter").value
       );
     };
@@ -208,11 +173,10 @@
       let s = document.createElement("script");
       s.src = "https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js";
       s.onload = () => {
-        updateDateDropdown(allEvents, document.getElementById("timezoneSelect").value);
+        updateDateDropdown(allEvents, FIXED_TIMEZONE);
         render(
           allEvents,
           parseTimeRange(document.getElementById("timeFilter").value),
-          document.getElementById("timezoneSelect").value,
           document.getElementById("dateFilter").value
         );
       };
@@ -230,11 +194,10 @@
         })
         .then(data => {
           allEvents = data;
-          updateDateDropdown(allEvents, document.getElementById("timezoneSelect").value);
+          updateDateDropdown(allEvents, FIXED_TIMEZONE);
           render(
             allEvents,
             parseTimeRange(document.getElementById("timeFilter").value),
-            document.getElementById("timezoneSelect").value,
             document.getElementById("dateFilter").value
           );
         })
@@ -255,7 +218,6 @@
       });
       let daysArr = Array.from(daysSet).sort((a, b) => {
         let getDate = txt => {
-          // Use US format for parse safety
           let d = new Date(txt.replace(/^(\w+), /, ""));
           return d;
         };
@@ -273,11 +235,6 @@
       });
       if (prev && daysArr.includes(prev)) dateSel.value = prev;
     }
-
-    // Whenever timezone changes, update date dropdown
-    document.getElementById("timezoneSelect").addEventListener("change", function() {
-      updateDateDropdown(allEvents, this.value);
-    });
 
     loadScheduleFromServer();
   </script>
