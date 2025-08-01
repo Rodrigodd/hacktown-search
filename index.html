@@ -350,6 +350,58 @@
       return (end - start) / (1000 * 60);
     }
 
+    // Filtering with yield after each 32 items
+    async function filterEventsAsync(events, filterTimeRange, filterDayKey, filterPlace, searchText) {
+      let filtered = [];
+      let count = 0;
+
+      for (let i = 0; i < events.length; ++i) {
+        let ev = events[i];
+
+        // Filtro de lugar
+        if (filterPlace) {
+          let place = ev.place && ev.place.trim() ? ev.place.trim() : "sem local definido";
+          if (place !== filterPlace) continue;
+        }
+
+        // Filtro de busca
+        if (searchText && searchText.trim() && !eventMatchesSearch(ev, searchText)) continue;
+
+        // Filtro de data (dia)
+        if (filterDayKey) {
+          let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
+          let dayKey = formatarDataPortugues(localStart);
+          if (dayKey !== filterDayKey) continue;
+        }
+
+        // Filtro de horário
+        if (filterTimeRange) {
+          const [startStr, endStr] = filterTimeRange;
+          const startObj = parseHHMM(startStr);
+          const endObj = parseHHMM(endStr);
+          const startMin = timeObjToMinutes(startObj);
+          const endMin = timeObjToMinutes(endObj);
+
+          const startLocal = toLocal(ev.start_time, FIXED_TIMEZONE);
+          const endLocal = toLocal(ev.end_time, FIXED_TIMEZONE);
+          const evStartMin = localTimeToMinutes(startLocal);
+          const evEndMin = localTimeToMinutes(endLocal);
+
+          if (startMin === endMin) {
+            if (!(evStartMin <= startMin && startMin < evEndMin)) continue;
+          } else {
+            if (evEndMin <= startMin || evStartMin >= endMin) continue;
+          }
+        }
+
+        filtered.push(ev);
+
+        count++;
+        if (count % 32 === 0) await new Promise(r => setTimeout(r, 0));
+      }
+      return filtered;
+    }
+
     function render(events, filterTimeRange, filterDayKey, filterPlace, searchText) {
       const scheduleDiv = document.getElementById("schedule");
       document.getElementById("loading").style.display = "none";
@@ -358,53 +410,13 @@
         return;
       }
 
-      if (filterPlace) {
-        events = events.filter(ev => {
-          let place = ev.place && ev.place.trim() ? ev.place.trim() : "sem local definido";
-          return place === filterPlace;
-        });
-      }
-
-      if (searchText && searchText.trim()) {
-        events = events.filter(ev => eventMatchesSearch(ev, searchText));
-      }
-
-      events = events.slice();
+      // Organize by day
       let days = {};
-      events.forEach(ev => {
+      for (let ev of events) {
         let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
         let dayKey = formatarDataPortugues(localStart);
         if (!days[dayKey]) days[dayKey] = [];
         days[dayKey].push(ev);
-      });
-
-      if (filterDayKey) {
-        for (let day in days) {
-          if (day !== filterDayKey) delete days[day];
-        }
-      }
-
-      if (filterTimeRange) {
-        const [startStr, endStr] = filterTimeRange;
-        const startObj = parseHHMM(startStr);
-        const endObj = parseHHMM(endStr);
-        const startMin = timeObjToMinutes(startObj);
-        const endMin = timeObjToMinutes(endObj);
-
-        for (let day in days) {
-          days[day] = days[day].filter(ev => {
-            const startLocal = toLocal(ev.start_time, FIXED_TIMEZONE);
-            const endLocal = toLocal(ev.end_time, FIXED_TIMEZONE);
-            const evStartMin = localTimeToMinutes(startLocal);
-            const evEndMin = localTimeToMinutes(endLocal);
-
-            if (startMin === endMin) {
-              return evStartMin <= startMin && startMin < evEndMin;
-            } else {
-              return !(evEndMin <= startMin || evStartMin >= endMin);
-            }
-          });
-        }
       }
 
       let html = "";
@@ -420,8 +432,8 @@
       })) {
         if (!days[day].length) continue;
 
+        let dayEvents = days[day];
         // Split into long and normal events for this day
-        let dayEvents = days[day].slice();
         let longEvents = [];
         let normalEvents = [];
         for (let ev of dayEvents) {
@@ -541,7 +553,7 @@
       if (e.target === this) this.style.display = "none";
     };
 
-    function filterAsync() {
+    async function filterAsync() {
       const args = [
         allEvents,
         parseTimeRange(document.getElementById("timeFilter").value),
@@ -567,9 +579,10 @@
       }
     }
 
-    async function doFilterAsync(...args) {
-      await new Promise(r => setTimeout(r, 0));
-      render(...args);
+    async function doFilterAsync(allEvents, filterTimeRange, filterDayKey, filterPlace, searchText) {
+      // filter all items before render, yield every 32
+      const filtered = await filterEventsAsync(allEvents, filterTimeRange, filterDayKey, filterPlace, searchText);
+      render(filtered, null, null, null, null); // rendering expects already filtered, so only pass filtered list
     }
 
     document.getElementById("filterBtn").onclick = function() {
