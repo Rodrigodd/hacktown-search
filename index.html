@@ -78,14 +78,18 @@
   <h1>Visualizador de Agenda HackTown 2025</h1>
   <div class="controls">
     <span id="serverStatus"></span>
-    <label>
-      Data:
-      <select id="dateFilter"><option value="">Todas as Datas</option></select>
-    </label>
-    <label>
-      Filtro de horário:
-      <input type="text" placeholder="ex: 09:00 ou 10:00-12:00" id="timeFilter" size="13">
-    </label>
+    <div>
+      <label>
+        Data:
+        <select id="dateFilter"><option value="">Todas as Datas</option></select>
+      </label>
+    </div>
+    <div>
+      <label>
+        Horário:
+        <input type="text" placeholder="ex: 09:00 ou 10:00-12:00" id="timeFilter" size="13">
+      </label>
+    </div>
     <button id="filterBtn">Filtrar</button>
   </div>
   <div id="loading">Carregando agenda do servidor...</div>
