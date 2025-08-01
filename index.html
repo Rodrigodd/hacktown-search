@@ -153,6 +153,20 @@
     }
     .popup-time, .popup-place { color: #006; font-size: 1em; margin-bottom: 0.2em; }
     .popup-description { margin: 1em 0; }
+    .popup-tags { margin-bottom: 0.8em; margin-top: 0.6em; }
+    .popup-tag {
+      display: inline-block;
+      background: #f6e6aa;
+      color: #6a4e00;
+      border-radius: 8px;
+      padding: 0.18em 0.7em;
+      font-size: 0.97em;
+      font-weight: 500;
+      margin-right: 0.4em;
+      margin-bottom: 0.3em;
+      letter-spacing: 0.01em;
+      border: 1px solid #f9dfa2;
+    }
     .popup-speakers { margin-top: 1em; }
     .popup-speaker {
       border-top: 1px solid #eee; padding-top: .7em; margin-top: .7em;
@@ -260,7 +274,6 @@
 
     let allEvents = [];
 
-    // Async filter control
     let filterTask = null;
     let pendingFilter = null;
 
@@ -359,7 +372,6 @@
       })) {
         if (!days[day].length) continue;
 
-        // Sort events in this day by duration (descending)
         let dayEvents = days[day].slice();
         dayEvents.sort((evA, evB) => getDurationMinutes(evB) - getDurationMinutes(evA));
 
@@ -411,6 +423,16 @@
       let desc = ev.description && ev.description.trim() ? ev.description : "<em>Nenhuma descrição disponível.</em>";
       let place = ev.place && ev.place.trim() ? ev.place : "<em>sem local definido</em>";
 
+      // Tags
+      let tagsHtml = "";
+      if (ev.tags && Array.isArray(ev.tags) && ev.tags.length) {
+        tagsHtml = `<div class="popup-tags">`;
+        tagsHtml += ev.tags.map(tag =>
+          `<span class="popup-tag">${tag.name || tag}</span>`
+        ).join('');
+        tagsHtml += `</div>`;
+      }
+
       let speakersHtml = "";
       if (ev.speakers && ev.speakers.length) {
         speakersHtml = `<div class="popup-speakers"><strong>Palestrantes:</strong>`;
@@ -436,6 +458,7 @@
       let popupHtml = `
         <div class="popup-time">${dateStr}, ${startStr} - ${endStr}</div>
         <div class="popup-place">${place}</div>
+        ${tagsHtml}
         <div class="popup-description">${desc}</div>
         ${speakersHtml}
       `;
@@ -449,7 +472,6 @@
       if (e.target === this) this.style.display = "none";
     };
 
-    // Async filter logic
     function filterAsync() {
       const args = [
         allEvents,
