@@ -15,6 +15,30 @@
     .event-title { font-weight: bold; }
     .event-place { color: #006; font-size: .95em; }
     #loading { color: #444; font-style: italic; }
+    #progress-bar-container {
+      width: 100%;
+      background: #e0e0e0;
+      border-radius: 10px;
+      margin-top: 1em;
+      margin-bottom: 1em;
+      height: 20px;
+      display: none;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #0056cc;
+      border-radius: 10px;
+      transition: width 0.2s;
+    }
+    #progress-msg {
+      margin-top: 0.4em;
+      margin-bottom: 0.8em;
+      color: #0056cc;
+      font-size: 1em;
+      font-weight: bold;
+      display: none;
+    }
     /* Popup styles */
     #popupOverlay {
       display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100vw; height: 100vh;
@@ -65,6 +89,10 @@
     <button id="filterBtn">Filtrar</button>
   </div>
   <div id="loading">Carregando agenda do servidor...</div>
+  <div id="progress-bar-container">
+    <div id="progress-bar"></div>
+  </div>
+  <div id="progress-msg"></div>
   <div id="schedule"></div>
   <!-- Popup Overlay -->
   <div id="popupOverlay">
@@ -101,7 +129,6 @@
     const diasSemana = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
     const mesesAno = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
     function formatarDataPortugues(date) {
-      // date é um objeto Date
       return diasSemana[date.getDay()] + ', ' +
         String(date.getDate()).padStart(2, '0') + ' de ' +
         mesesAno[date.getMonth()] + ' de ' + date.getFullYear();
@@ -182,7 +209,6 @@
       }
       scheduleDiv.innerHTML = html || "<p>Nenhum evento corresponde ao filtro.</p>";
 
-      // Adiciona eventos para abrir o popup
       document.querySelectorAll('.event').forEach(div => {
         div.onclick = () => {
           const eventId = Number(div.getAttribute('data-id'));
@@ -200,7 +226,6 @@
       }
     }
 
-    // ---- Popup logic ----
     function showPopup(ev) {
       if (!ev) return;
       let localStart = toLocal(ev.start_time, FIXED_TIMEZONE);
@@ -267,7 +292,6 @@
       );
     };
 
-    // Luxon para fuso horário
     (function addLuxonScript() {
       if (window.luxon) return;
       let s = document.createElement("script");
@@ -283,32 +307,8 @@
       document.head.appendChild(s);
     })();
 
-    function loadScheduleFromServer() {
-      const status = document.getElementById('serverStatus');
-      fetch('all_schedules.json')
-        .then(resp => {
-          if (!resp.ok) throw new Error("HTTP " + resp.status);
-          return resp.json();
-        })
-        .then(data => {
-          allEvents = data;
-          updateDateDropdown(allEvents, FIXED_TIMEZONE);
-          render(
-            allEvents,
-            parseTimeRange(document.getElementById("timeFilter").value),
-            document.getElementById("dateFilter").value
-          );
-        })
-        .catch(err => {
-          status.textContent = "Falha ao carregar all_schedules.json do servidor: " + err;
-          document.getElementById("loading").style.display = "none";
-        });
-    }
-
-    // Retorna a string formatarDataPortugues para o dia de hoje
     function dataHojePortugues() {
       const agora = new Date();
-      // converte para o fuso de SP
       let spDate;
       if (window.luxon) {
         spDate = window.luxon.DateTime.fromJSDate(agora).setZone(FIXED_TIMEZONE).toJSDate();
@@ -348,7 +348,6 @@
 
       // Se não houver seleção anterior, tente selecionar hoje automaticamente
       if (!prev || !daysArr.includes(prev)) {
-        // Só define para hoje se existir essa opção
         const hojeStr = dataHojePortugues();
         if (daysArr.includes(hojeStr)) {
           dateSel.value = hojeStr;
@@ -356,9 +355,73 @@
           dateSel.value = "";
         }
       } else {
-        // Mantém a seleção anterior
         dateSel.value = prev;
       }
+    }
+
+    function setProgressBar(percent, msg) {
+      const barContainer = document.getElementById('progress-bar-container');
+      const bar = document.getElementById('progress-bar');
+      const barMsg = document.getElementById('progress-msg');
+      barContainer.style.display = 'block';
+      barMsg.style.display = 'block';
+      bar.style.width = percent + "%";
+      barMsg.textContent = msg;
+      if (percent >= 100) {
+        setTimeout(() => {
+          barContainer.style.display = 'none';
+          barMsg.style.display = 'none';
+        }, 600);
+      }
+    }
+
+    // Download com barra de progresso
+    function loadScheduleFromServer() {
+      const status = document.getElementById('serverStatus');
+      const loading = document.getElementById('loading');
+      setProgressBar(0, "Baixando agenda...");
+      loading.style.display = "block";
+      // Utiliza XMLHttpRequest para progresso
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'all_schedules.json', true);
+      xhr.responseType = 'text';
+
+      xhr.onprogress = function (e) {
+        if (e.lengthComputable) {
+          let percent = Math.round((e.loaded / e.total) * 100);
+          setProgressBar(percent, `Baixando agenda... (${percent}%)`);
+        } else {
+          setProgressBar(50, "Baixando agenda...");
+        }
+      };
+      xhr.onloadstart = function () {
+        setProgressBar(0, "Baixando agenda...");
+      };
+      xhr.onerror = function () {
+        setProgressBar(0, "Erro ao baixar agenda.");
+        status.textContent = "Falha ao carregar all_schedules.json do servidor.";
+        loading.style.display = "none";
+      };
+      xhr.onload = function () {
+        setProgressBar(100, "Concluído!");
+        loading.style.display = "none";
+        if (xhr.status < 200 || xhr.status >= 300) {
+          status.textContent = "Falha ao carregar all_schedules.json do servidor: HTTP " + xhr.status;
+          return;
+        }
+        try {
+          allEvents = JSON.parse(xhr.responseText);
+          updateDateDropdown(allEvents, FIXED_TIMEZONE);
+          render(
+            allEvents,
+            parseTimeRange(document.getElementById("timeFilter").value),
+            document.getElementById("dateFilter").value
+          );
+        } catch (e) {
+          status.textContent = "Erro ao processar JSON da agenda: " + e;
+        }
+      };
+      xhr.send();
     }
 
     loadScheduleFromServer();
